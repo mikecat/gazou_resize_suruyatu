@@ -1,0 +1,235 @@
+body {
+	text-align: center;
+	margin: 0;
+}
+
+#appTitle {
+	font-size: 200%;
+	margin: 0.5em;
+}
+
+#imageAreaWrapper {
+	display: inline-block;
+}
+
+#imageArea {
+	display: inline-grid;
+	padding: 0 1em 1em 1em;
+	box-sizing: border-box;
+}
+
+#imageArea canvas {
+	/* 横画面用 */
+	max-width: 80vw;
+	max-height: calc(100vh - 6em);
+	grid-row: 1;
+	grid-column: 1;
+}
+
+@media (max-aspect-ratio: 1/1) {
+	#imageArea canvas {
+		/* 縦画面用 */
+		max-width: calc(100vw - 2em);
+		max-height: 50vh;
+	}
+}
+
+#editCanvas {
+	z-index: 1;
+}
+
+#imageCanvas {
+	z-index: 0;
+}
+
+#controlArea {
+	display: inline-block;
+	vertical-align: top;
+	text-align: left;
+}
+
+#operationSelector {
+	margin: 1em auto;
+}
+
+.noWrapPart {
+	white-space: nowrap;
+}
+
+#loadsaveArea > div {
+	width: 24em;
+}
+
+#loadsaveArea button {
+	padding: 0.5em;
+}
+
+#loadButtonsArea {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	width: 100%;
+}
+
+#loadFileButton {
+	margin-right: 0.5em;
+}
+
+#loadClipboardButton {
+	margin-left: 0.5em;
+}
+
+#saveButtonsArea {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto;
+	margin-top: 1.5em;
+}
+
+#saveJpgButton {
+	margin-right: 0.5em;
+}
+
+#savePngButton {
+	margin-left: 0.5em;
+	margin-right: 0.5em;
+}
+
+#saveWebpButton {
+	margin-left: 0.5em;
+}
+
+#saveQualityArea {
+	grid-row: 2;
+	grid-column: 1 / span 3;
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	margin-top: 1em;
+}
+
+#saveQuality {
+	margin-left: 0.3em;
+}
+
+#undoRedoArea {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	margin-top: 2em;
+}
+
+#undoButton {
+	margin-right: 0.5em;
+}
+
+#redoButton {
+	margin-left: 0.5em;
+}
+
+#imageOptionArea {
+	margin-top: 1.5em;
+	line-height: 1.7em;
+}
+
+label[for="imageIsPremultipliedAlpha"] {
+	margin-top: 1em;
+}
+
+#resizeMode {
+	margin: 0.5em auto;
+}
+
+#resizeButton {
+	width: 100%;
+	margin-top: 2em;
+	padding: 0.5em;
+}
+
+#rotateButtonArea {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto;
+	margin-top: 1.5em;
+}
+
+#rotateButtonArea button {
+	padding: 0.5em;
+}
+
+#rotateLeftButton {
+	grid-row: 1;
+	grid-column: 1;
+	margin-right: 0.3em;
+	margin-bottom: 0.3em;
+}
+
+#rotateRightButton {
+	grid-row: 1;
+	grid-column: 2;
+	margin-left: 0.3em;
+	margin-bottom: 0.3em;
+}
+
+#horizontalFlipButton {
+	grid-row: 2;
+	grid-column: 1;
+	margin-right: 0.3em;
+	margin-top: 0.3em;
+}
+
+#verticalFlipButton {
+	grid-row: 2;
+	grid-column: 2;
+	margin-left: 0.3em;
+	margin-top: 0.3em;
+}
+
+#resizeMethodArea {
+	margin-top: 1.5em;
+	line-height: 1.7em;
+}
+
+#cropRetainAspectRatio {
+	margin-top: 1em;
+	margin-bottom: 1em;
+}
+
+#cropButton {
+	padding: 0.5em;
+	margin-top: 2em;
+	width: 100%;
+}
+
+#paintSizeArea {
+	margin-bottom: 1em;
+}
+
+#paintButtonsArea {
+	display: grid;
+	grid-template-rows: auto auto auto;
+	grid-template-columns: auto auto;
+	margin-top: 1em;
+}
+
+#paintButtonsArea > button {
+	grid-column: 1;
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+	margin-right: 1em;
+	padding: 0.5em 1.5em;
+}
+
+#paintButtonsArea > div {
+	grid-column: 2;
+	align-content: center;
+}
+
+#paintButton, #paintColorArea {
+	grid-row: 1;
+}
+
+#mosaicButton, #mosaicSizeArea {
+	grid-row: 2;
+}
+
+#blurButton, #blurSizeArea {
+	grid-row: 3;
+}

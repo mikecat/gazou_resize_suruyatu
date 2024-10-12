@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>画像をリサイズするやつ</title>
+		<script src="gazou_resize_suruyatu.js"></script>
+		<link href="index.css" rel="stylesheet">
+	</head>
+	<body>
+		<h1 id="appTitle">画像をリサイズするやつ</h1>
+		<div id="imageArea">
+			<canvas id="editCanvas" width="640" height="480"></canvas>
+			<canvas id="imageCanvas" width="640" height="480"></canvas>
+		</div>
+		<div id="controlArea">
+			<div>
+				画像サイズ：<span id="imageSizeArea">640×480</span>
+			</div>
+			<select id="operationSelector">
+				<option value="loadsave" selected>読み込み・保存</option>
+				<option value="resize">リサイズ・回転・反転</option>
+				<option value="crop">切り抜き</option>
+				<option value="paint">塗りつぶし・モザイク・ぼかし</option>
+			</select>
+			<div id="loadsaveArea">
+				<div id="loadButtonsArea">
+					<button id="loadFileButton" type="button">ファイル読込</button>
+					<button id="loadClipboardButton" type="button">クリップボード読込</button>
+				</div>
+				<div id="saveButtonsArea">
+					<button id="saveJpgButton" type="button">JPEG保存</button>
+					<button id="savePngButton" type="button">PNG保存</button>
+					<button id="saveWebpButton" type="button">WebP保存</button>
+					<div id="saveQualityArea">
+						<div id="saveQualityPrefix">品質：</div>
+						<input id="saveQualityRange" type="range" min="0" max="100" value="70" step="1">
+						<input id="saveQuality" type="number" min="0" max="100" value="70" size="3">
+					</div>
+				</div>
+				<div id="undoRedoArea">
+					<button id="undoButton" type="button">アンドゥ<br>(元に戻す)</button>
+					<button id="redoButton" type="button">リドゥ<br>(やり直す)</button>
+				</div>
+				<div id="imageOptionArea">
+					<label for="operateInRgb">
+						<input id="operateInRgb" type="checkbox" checked>
+						RGBで処理を行う (推奨)
+					</label>
+					<br>
+					<label for="imageIsPremultipliedAlpha">
+						<input id="imageIsPremultipliedAlpha" type="checkbox">
+						画像を乗算済みアルファとして扱う
+					</label>
+				</div>
+			</div>
+			<div id="resizeArea">
+				<div>
+					目標サイズ：
+					<span class="noWrapPart">
+						<input id="resizeTargetWidth" type="number" min="1" max="99999" value="1280" size="5">
+						×
+						<input id="resizeTargetHeight" type="number" min="1" max="99999" value="1280" size="5">
+					</span>
+					<select id="resizeTargetPreset">
+						<option value="" selected>プリセット</option>
+						<option value="640,640">640×640</option>
+						<option value="1024,1024">1024×1024</option>
+						<option value="1280,1280">1280×1280</option>
+						<option value="1920,1920">1920×1920</option>
+					</select>
+					<br>
+					<select id="resizeMode">
+						<option value="fill">このサイズにする (縦横比を維持しない)</option>
+						<option value="contain" selected>このサイズ以下にする (このサイズに収める)</option>
+						<option value="cover">このサイズ以上にする (このサイズを覆う)</option>
+					</select>
+					<br>
+					<label for="resizeToMultipleOf8">
+						<input id="resizeToMultipleOf8" type="checkbox" checked>
+						8の倍数に丸める
+					</label>
+				</div>
+				<button id="resizeButton" type="button">
+					<span id="resizeResultSizeArea">1280×1280</span>にリサイズする
+				</button>
+				<div id="rotateButtonArea">
+					<button id="rotateLeftButton" type="button">左に90度回転</button>
+					<button id="rotateRightButton" type="button">右に90度回転</button>
+					<button id="horizontalFlipButton" type="button">左右反転</button>
+					<button id="verticalFlipButton" type="button">上下反転</button>
+				</div>
+				<div id="resizeMethodArea">
+					拡大方法：
+					<select id="stretchMethod">
+						<option id="nearest">ニアレストネイバー</option>
+						<option id="bilinear">バイリニア</option>
+						<option id="bicubic" selected>バイキュービック</option>
+						<option id="lanczos3">Lanczos3</option>
+					</select>
+					<br>
+					縮小方法：
+					<select id="shrinkMethod">
+						<option id="sample">1点サンプリング</option>
+						<option id="average" selected>平均</option>
+					</select>
+				</div>
+			</div>
+			<div id="cropArea">
+				<div>
+					サイズ：
+					<span class="noWrapPart">
+						<input id="cropWidth" type="number" min="1" max="99999" value="1280" size="5">
+						×
+						<input id="cropHeight" type="number" min="1" max="99999" value="720" size="5">
+					</span>
+					<select id="cropSizePreset">
+						<option value="" selected>プリセット</option>
+						<optgroup label="1:1">
+							<option value="640,640">640×640</option>
+							<option value="1024,1024">1024×1024</option>
+							<option value="1280,1280">1280×1280</option>
+							<option value="1920,1920">1920×1920</option>
+						</optgroup>
+						<optgroup label="4:3">
+							<option value="640,480">640×480</option>
+							<option value="1024,768">1024×768</option>
+							<option value="1280,960">1280×960</option>
+							<option value="1920,1440">1920×1440</option>
+						</optgroup>
+						<optgroup label="16:9">
+							<option value="640,360">640×360</option>
+							<option value="1024,576">1024×576</option>
+							<option value="1280,720">1280×720</option>
+							<option value="1920,1080">1920×1080</option>
+						</optgroup>
+						<optgroup label="16:10">
+							<option value="640,400">640×400</option>
+							<option value="1024,640">1024×640</option>
+							<option value="1280,800">1280×800</option>
+							<option value="1920,1200">1920×1200</option>
+						</optgroup>
+						<optgroup label="3:4">
+							<option value="480,640">480×640</option>
+							<option value="768,1024">768×1024</option>
+							<option value="960,1280">960×1280</option>
+							<option value="1440,1920">1440×1920</option>
+						</optgroup>
+						<optgroup label="9:16">
+							<option value="360,640">360×640</option>
+							<option value="576,1024">576×1024</option>
+							<option value="720,1280">720×1280</option>
+							<option value="1080,1920">1080×1920</option>
+						</optgroup>
+						<optgroup label="10:16">
+							<option value="400,640">400×640</option>
+							<option value="640,1024">640×1024</option>
+							<option value="800,1280">800×1280</option>
+							<option value="1200,1920">1200×1920</option>
+						</optgroup>
+					</select>
+					<br>
+					<label for="cropRetainAspectRatio">
+						<input id="cropRetainAspectRatio" type="checkbox">
+						縦横比をロック
+					</label>
+					<label for="cropToMultipleOf8">
+						<input id="cropToMultipleOf8" type="checkbox" checked>
+						8の倍数に丸める
+					</label>
+					<br>
+					位置：
+					<span class="noWrapPart">(
+						<input id="cropX" type="number" min="0" max="99999" value="0" size="5">
+						,
+						<input id="cropY" type="number" min="0" max="99999" value="0" size="5">
+						)
+					</span>
+				</div>
+				<button id="cropButton" type="button">
+					切り抜く
+				</button>
+			</div>
+			<div id="paintArea">
+				<div id="paintSizeArea">
+					サイズ：
+					<span class="noWrapPart">
+						<input id="paintWidth" type="number" min="1" max="99999" value="1280" size="5">
+						×
+						<input id="paintHeight" type="number" min="1" max="99999" value="720" size="5">
+					</span>
+				</div>
+				<div>
+					位置：
+					<span class="noWrapPart">(
+						<input id="paintX" type="number" min="0" max="99999" value="0" size="5">
+						,
+						<input id="paintY" type="number" min="0" max="99999" value="0" size="5">
+						)
+					</span>
+				</div>
+				<div id="paintButtonsArea">
+					<button id="paintButton" type="button">塗りつぶす</button>
+					<div id="paintColorArea">
+						色：
+						<input id="paintColor" type="color" value="#808080">
+					</div>
+					<button id="mosaicButton" type="button">モザイク</button>
+					<div id="mosaicSizeArea">
+						強さ：
+						<input id="mosaicSize" type="number" min="1" value="8" size="5">
+					</div>
+					<button id="blurButton" type="button">ぼかす</button>
+					<div id="blurSizeArea">
+						強さ：
+						<input id="blurSize" type="number" min="1" value="8" size="5">
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
