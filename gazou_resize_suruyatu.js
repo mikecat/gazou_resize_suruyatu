@@ -408,6 +408,36 @@ window.addEventListener("DOMContentLoaded", () => {
 		saveImage("image/webp", ".webp");
 	});
 
+	elems.rotateLeftButton.addEventListener("click", () => {
+		const srcData = getCurrentData();
+		const dstData = imageCanvasContext.createImageData(srcData.height, srcData.width);
+		for (let y = 0; y < srcData.height; y++) {
+			const dx = y;
+			for (let x = 0; x < srcData.width; x++) {
+				const dy = srcData.width - 1 - x;
+				for (let i = 0; i < 4; i++) {
+					dstData.data[(dy * srcData.height + dx) * 4 + i] = srcData.data[(y * srcData.width + x) * 4 + i];
+				}
+			}
+		}
+		doNewOperation(dstData);
+	});
+
+	elems.rotateRightButton.addEventListener("click", () => {
+		const srcData = getCurrentData();
+		const dstData = imageCanvasContext.createImageData(srcData.height, srcData.width);
+		for (let y = 0; y < srcData.height; y++) {
+			const dx = srcData.height - 1 - y;
+			for (let x = 0; x < srcData.width; x++) {
+				const dy = x;
+				for (let i = 0; i < 4; i++) {
+					dstData.data[(dy * srcData.height + dx) * 4 + i] = srcData.data[(y * srcData.width + x) * 4 + i];
+				}
+			}
+		}
+		doNewOperation(dstData);
+	});
+
 	elems.horizontalFlipButton.addEventListener("click", () => {
 		const srcData = getCurrentData();
 		const dstData = imageCanvasContext.createImageData(srcData.width, srcData.height);
