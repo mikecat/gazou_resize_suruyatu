@@ -20,7 +20,7 @@ body {
 
 #imageArea canvas {
 	/* 横画面用 */
-	max-width: 80vw;
+	max-width: calc(100vw - 28em);
 	max-height: calc(100vh - 6em);
 	grid-row: 1;
 	grid-column: 1;
