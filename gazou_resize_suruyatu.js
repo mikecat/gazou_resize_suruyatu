@@ -209,6 +209,56 @@ window.addEventListener("DOMContentLoaded", () => {
 	editCanvasContext.globalCompositeOperation = "copy";
 	imageCanvasContext.globalCompositeOperation = "copy";
 
+	const putImageDataToCanvas = (data) => {
+		elems.editCanvas.width = data.width;
+		elems.editCanvas.height = data.height;
+		elems.imageCanvas.width = data.width;
+		elems.imageCanvas.height = data.height;
+		imageCanvasContext.putImageData(data, 0, 0);
+		updateSizeInfo();
+		updateResizeToSize();
+		cropSizeAdjust();
+		updateCropLock();
+		paintSizeAdjust();
+	};
+
+	let undoPos = 0;
+	const undoList = [];
+	const initUndo = (data) => {
+		undoList.splice(0);
+		undoList.push(data);
+		undoPos = 0;
+		elems.undoButton.disabled = true;
+		elems.redoButton.disabled = true;
+	};
+	const doNewOperation = (newData) => {
+		undoList.splice(undoPos + 1);
+		undoList.push(newData);
+		undoPos = undoList.length - 1;
+		elems.undoButton.disabled = !(undoPos > 0);
+		elems.redoButton.disabled = true;
+		putImageDataToCanvas(newData);
+	};
+	const getCurrentData = () => {
+		return undoList[undoPos];
+	};
+	elems.undoButton.addEventListener("click", () => {
+		if (undoPos > 0) {
+			undoPos--;
+			putImageDataToCanvas(undoList[undoPos]);
+			elems.undoButton.disabled = !(undoPos > 0);
+			elems.redoButton.disabled = !(undoPos < undoList.length - 1);
+		}
+	});
+	elems.redoButton.addEventListener("click", () => {
+		if (undoPos < undoList.length - 1) {
+			undoPos++;
+			putImageDataToCanvas(undoList[undoPos]);
+			elems.undoButton.disabled = !(undoPos > 0);
+			elems.redoButton.disabled = !(undoPos < undoList.length - 1);
+		}
+	});
+
 	let nameOfLoadedFile = "image";
 
 	const loadImage = (blob, fileName) => {
@@ -223,6 +273,7 @@ window.addEventListener("DOMContentLoaded", () => {
 			elems.imageCanvas.width = img.width;
 			elems.imageCanvas.height = img.height;
 			imageCanvasContext.drawImage(img, 0, 0);
+			initUndo(imageCanvasContext.getImageData(0, 0, img.width, img.height));
 			updateSizeInfo();
 			updateResizeToSize();
 			cropSizeAdjust();
@@ -355,5 +406,33 @@ window.addEventListener("DOMContentLoaded", () => {
 	});
 	elems.saveWebpButton.addEventListener("click", () => {
 		saveImage("image/webp", ".webp");
+	});
+
+	elems.horizontalFlipButton.addEventListener("click", () => {
+		const srcData = getCurrentData();
+		const dstData = imageCanvasContext.createImageData(srcData.width, srcData.height);
+		for (let y = 0; y < srcData.height; y++) {
+			for (let x = 0; x < srcData.width; x++) {
+				const dx = srcData.width - 1 - x;
+				for (let i = 0; i < 4; i++) {
+					dstData.data[(y * srcData.width + dx) * 4 + i] = srcData.data[(y * srcData.width + x) * 4 + i];
+				}
+			}
+		}
+		doNewOperation(dstData);
+	});
+
+	elems.verticalFlipButton.addEventListener("click", () => {
+		const srcData = getCurrentData();
+		const dstData = imageCanvasContext.createImageData(srcData.width, srcData.height);
+		for (let y = 0; y < srcData.height; y++) {
+			const dy = srcData.height - 1 - y;
+			for (let x = 0; x < srcData.width; x++) {
+				for (let i = 0; i < 4; i++) {
+					dstData.data[(dy * srcData.width + x) * 4 + i] = srcData.data[(y * srcData.width + x) * 4 + i];
+				}
+			}
+		}
+		doNewOperation(dstData);
 	});
 });
