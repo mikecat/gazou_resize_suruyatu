@@ -14,6 +14,10 @@ window.addEventListener("DOMContentLoaded", () => {
 	elems.operationSelector.addEventListener("change", applyOperationSelection);
 	applyOperationSelection();
 
+	const updateSizeInfo = () => {
+		elems.imageSizeArea.textContent = `${elems.imageCanvas.width}×${elems.imageCanvas.height}`;
+	};
+
 	let resizeToWidth = 1280, resizeToHeight = 1280;
 	const updateResizeToSize = () => {
 		const currentWidth = elems.imageCanvas.width, currentHeight = elems.imageCanvas.height;
@@ -199,4 +203,157 @@ window.addEventListener("DOMContentLoaded", () => {
 	elems.paintWidth.addEventListener("change", paintSizeAdjust);
 	elems.paintHeight.addEventListener("change", paintSizeAdjust);
 	paintSizeAdjust();
+
+	const editCanvasContext = elems.editCanvas.getContext("2d");
+	const imageCanvasContext = elems.imageCanvas.getContext("2d");
+	editCanvasContext.globalCompositeOperation = "copy";
+	imageCanvasContext.globalCompositeOperation = "copy";
+
+	let nameOfLoadedFile = "image";
+
+	const loadImage = (blob, fileName) => {
+		const url = URL.createObjectURL(blob);
+		const img = document.createElement("img");
+		img.onload = () => {
+			const lastDotIdx = fileName.lastIndexOf(".");
+			nameOfLoadedFile = lastDotIdx <= 0 ? fileName : fileName.substring(0, lastDotIdx);
+			URL.revokeObjectURL(url);
+			elems.editCanvas.width = img.width;
+			elems.editCanvas.height = img.height;
+			elems.imageCanvas.width = img.width;
+			elems.imageCanvas.height = img.height;
+			imageCanvasContext.drawImage(img, 0, 0);
+			updateSizeInfo();
+			updateResizeToSize();
+			cropSizeAdjust();
+			updateCropLock();
+			paintSizeAdjust();
+		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			alert("画像の読み込みに失敗しました。");
+		};
+		img.src = url;
+	};
+
+	elems.loadFileButton.addEventListener("click", () => {
+		const fileSelector = document.createElement("input");
+		fileSelector.setAttribute("type", "file");
+		fileSelector.setAttribute("accept", "image/*");
+		fileSelector.onchange = () => {
+			if (fileSelector.files.length > 0) {
+				loadImage(fileSelector.files[0], fileSelector.files[0].name);
+			}
+		};
+		fileSelector.click();
+	});
+
+	document.addEventListener("dragover", (event) => {
+		const tr = event.dataTransfer;
+		if (tr.types.includes("Files")) {
+			event.preventDefault();
+			tr.dropEffect = "copy";
+		}
+	});
+
+	document.addEventListener("drop", (event) => {
+		const tr = event.dataTransfer;
+		if (tr.files.length > 0) {
+			event.preventDefault();
+			// 画像を優先する
+			for (let i = 0; i < tr.files.length; i++) {
+				if (tr.files[i].type.startsWith("image/")) {
+					loadImage(tr.files[i], tr.files[i].name);
+					return;
+				}
+			}
+			// 画像が見つからなかったら、タイプ不明のファイルの読み込みを試みる
+			for (let i = 0; i < tr.files.length; i++) {
+				if (tr.files[i].type === "") {
+					loadImage(tr.files[i], tr.files[i].name);
+					return;
+				}
+			}
+		}
+	});
+
+	if (navigator.clipboard) {
+		elems.loadClipboardButton.addEventListener("click", () => {
+			if (!navigator.clipboard) {
+				alert("この環境はクリップボードの読み取りに非対応です。");
+				return;
+			}
+			navigator.clipboard.read().then((items) => {
+				for (let i = 0; i < items.length; i++) {
+					const item = items[i];
+					for (let j = 0; j < item.types.length; j++) {
+						if (item.types[j].startsWith("image/")) {
+							item.getType(item.types[j]).then((blob) => {
+								loadImage(blob, "clipboard");
+							}, (error) => {
+								console.log(error);
+								alert("クリップボードからのデータ取得に失敗しました。");
+							});
+							return;
+						}
+					}
+				}
+				alert("クリップボードに画像が見つかりません。");
+			}, (error) => {
+				console.error(error);
+				alert("クリップボードの読み取りに失敗しました。");
+			});
+		});
+	} else {
+		elems.loadClipboardButton.disabled = true;
+	}
+
+	const syncQualityNumberToRange = () => {
+		const quality = parseInt(elems.saveQuality.value, 10);
+		if (!isNaN(quality)) elems.saveQualityRange.value = quality;
+	};
+	elems.saveQualityRange.addEventListener("input", () => {
+		const quality = parseInt(elems.saveQualityRange.value, 10);
+		if (!isNaN(quality)) elems.saveQuality.value = quality;
+	});
+	elems.saveQuality.addEventListener("input", syncQualityNumberToRange);
+	syncQualityNumberToRange();
+
+	let prevSavedObjectUrl = null;
+	const saveImage = (mime, nameSuffix) => {
+		const quality = parseInt(elems.saveQuality.value, 10);
+		if (isNaN(quality) || quality < 0 || 100 < quality) {
+			alert("品質の設定が無効です。");
+			return;
+		}
+		try {
+			elems.imageCanvas.toBlob((blob) => {
+				if (blob === null) {
+					alert("画像の保存に失敗しました。");
+				} else if (blob.type !== mime) {
+					alert("この形式での保存には非対応のようです。");
+				} else {
+					if (prevSavedObjectUrl !== null) URL.revokeObjectURL(prevSavedObjectUrl);
+					prevSavedObjectUrl = URL.createObjectURL(blob);
+					const a = document.createElement("a");
+					a.setAttribute("href", prevSavedObjectUrl);
+					a.setAttribute("download", `${nameOfLoadedFile}_${elems.imageCanvas.width}x${elems.imageCanvas.height}${nameSuffix}`);
+					a.click();
+				}
+			}, mime, quality / 100.0);
+		} catch (error) {
+			console.log(error);
+			alert("画像の出力に失敗しました。");
+		}
+	};
+
+	elems.saveJpgButton.addEventListener("click", () => {
+		saveImage("image/jpeg", ".jpg");
+	});
+	elems.savePngButton.addEventListener("click", () => {
+		saveImage("image/png", ".png");
+	});
+	elems.saveWebpButton.addEventListener("click", () => {
+		saveImage("image/webp", ".webp");
+	});
 });
