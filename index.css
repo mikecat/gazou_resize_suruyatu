@@ -129,10 +129,6 @@ body {
 	line-height: 1.7em;
 }
 
-label[for="imageIsPremultipliedAlpha"] {
-	margin-top: 1em;
-}
-
 #resizeMode {
 	margin: 0.5em auto;
 }
