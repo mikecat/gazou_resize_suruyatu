@@ -258,6 +258,7 @@ window.addEventListener("DOMContentLoaded", () => {
 			elems.redoButton.disabled = !(undoPos < undoList.length - 1);
 		}
 	});
+	initUndo(imageCanvasContext.getImageData(0, 0, imageCanvas.width, imageCanvas.height));
 
 	let nameOfLoadedFile = "image";
 
@@ -406,6 +407,312 @@ window.addEventListener("DOMContentLoaded", () => {
 	});
 	elems.saveWebpButton.addEventListener("click", () => {
 		saveImage("image/webp", ".webp");
+	});
+
+	const getSamplePoints = (srcNumPoints, dstNumPoints) => {
+		if (dstNumPoints <= 1) {
+			return [0];
+		} else {
+			const res = [];
+			for (let i = 0; i < dstNumPoints; i++) {
+				res.push(i * (srcNumPoints - 1) / (dstNumPoints - 1));
+			}
+			return res;
+		}
+	};
+
+	const getCoefficientsForBiliniar = (srcNumPoints, dstNumPoints) => {
+		const samplePoints = getSamplePoints(srcNumPoints, dstNumPoints);
+		const res = [];
+		for (let i = 0; i < samplePoints.length; i++) {
+			const start = Math.floor(samplePoints[i]);
+			if (start === samplePoints[i]) {
+				res.push({offset: start, coeffs: [1]});
+			} else {
+				res.push({offset: start, coeffs: [start + 1 - samplePoints[i], samplePoints[i] - start]});
+			}
+		}
+		return res;
+	};
+
+	const getCoefficientsForBicubic = (() => {
+		// https://qiita.com/yoya/items/f167b2598fec98679422
+		const b = 1.0 / 3.0, c = 1.0 / 3.0;
+
+		const p = 2 - 1.5 * b - c;
+		const q = -3 + 2 * b + c;
+		const r = 0;
+		const s = 1 - (1.0 / 3.0) * b;
+		const t = -(1.0 / 6.0) * b - c;
+		const u = b + 5 * c;
+		const v = -2 * b - 8 * c;
+		const w = (4.0 / 3.0) * b + 4 * c;
+
+		const bicubicFunction = (x) => {
+			const ax = Math.abs(x);
+			if (ax < 1) {
+				return ((p * ax + q) * ax + r) * ax + s;
+			} else if (ax < 2) {
+				return ((t * ax + u) * ax + v) * ax + w;
+			} else {
+				return 0;
+			}
+		};
+
+		return (srcNumPoints, dstNumPoints) => {
+			const samplePoints = getSamplePoints(srcNumPoints, dstNumPoints);
+			const res = [];
+			for (let i = 0; i < samplePoints.length; i++) {
+				const start = Math.floor(samplePoints[i]);
+				let firstOffset = null;
+				const coeffs = [];
+				for (let j = -1; j <= 2; j++) {
+					const offset = start + j;
+					if (0 <= offset && offset < srcNumPoints) {
+						if (firstOffset === null) firstOffset = offset;
+						coeffs.push(bicubicFunction(j - (samplePoints[i] - start)));
+					}
+				}
+				res.push({offset: firstOffset, coeffs});
+			}
+			return res;
+		};
+	})();
+
+	const getCoefficientsForLanczos3 = (() => {
+		// https://qiita.com/yoya/items/f167b2598fec98679422
+		// https://en.wikipedia.org/wiki/Lanczos_resampling
+		const a = 3;
+
+		const sinc = (x) => {
+			const pi_x = Math.PI * x;
+			return Math.sin(pi_x) / pi_x; // x === 0 は下の関数で判定するので分岐不要
+		};
+
+		const lanczosFunction = (x) => {
+			if (x === 0) {
+				return 1;
+			} else if (Math.abs(x) < a) {
+				return sinc(x) * sinc(x / a);
+			} else {
+				return 0;
+			}
+		};
+
+		return (srcNumPoints, dstNumPoints) => {
+			const samplePoints = getSamplePoints(srcNumPoints, dstNumPoints);
+			const res = [];
+			for (let i = 0; i < samplePoints.length; i++) {
+				const start = Math.floor(samplePoints[i]);
+				let firstOffset = null;
+				const coeffs = [];
+				for (let j = -2; j <= 3; j++) {
+					const offset = start + j;
+					if (0 <= offset && offset < srcNumPoints) {
+						if (firstOffset === null) firstOffset = offset;
+						coeffs.push(lanczosFunction(j - (samplePoints[i] - start)));
+					}
+				}
+				res.push({offset: firstOffset, coeffs});
+			}
+			return res;
+		};
+	})();
+
+	const getCoeffiientsForAverage = (srcNumPoints, dstNumPoints) => {
+		const res = [];
+		for (let i = 0; i < dstNumPoints; i++) {
+			const begin = i * srcNumPoints / dstNumPoints;
+			const end = (i + 1) * srcNumPoints / dstNumPoints;
+			const beginInt = Math.floor(begin), endInt = Math.floor(end);
+			if (beginInt === endInt) {
+				res.push({offset: beginInt, coeffs: [end - begin]});
+			} else {
+				const coeffs = [1 - (begin - beginInt)];
+				for (let i = beginInt + 1; i < endInt; i++) {
+					coeffs.push(1);
+				}
+				if (end !== endInt) {
+					coeffs.push(end - endInt);
+				}
+				res.push({offset: beginInt, coeffs});
+			}
+		}
+		return res;
+	};
+
+	// [0, 255] の sRGB を [0, 1] の RGB に変換する
+	// https://www.psy.ritsumei.ac.jp/akitaoka/RGBtoXYZ_etal01.html
+	const sRGB_to_RGB = (value) => {
+		const temp = value / 255;
+		if (temp <= 0.04045) {
+			return temp / 12.92;
+		} else {
+			return Math.pow((temp + 0.055) / 1.055, 2.4);
+		}
+	};
+	const sRGB_to_RGB_table = new Float32Array(256);
+	for (let i = 0; i < 256; i++) {
+		sRGB_to_RGB_table[i] = sRGB_to_RGB(i);
+	}
+
+	// [0, 1] の RGB を [0, 255] の sRGB に変換する
+	const RGB_to_sRGB = (value) => {
+		const temp = value * 12.92;
+		if (temp <= 0.04045) {
+			return temp * 255;
+		} else {
+			return (Math.pow(value, 1 / 2.4) * 1.055 - 0.055) * 255;
+		}
+	};
+
+	const applyCoeffs = (srcData, xCoeffs, yCoeffs) => {
+		const useRgb = elems.operateInRgb.checked;
+		const srcPixels = new Float32Array(srcData.width * srcData.height * 4);
+		// 入力を [0, 1] に変換する
+		for (let i = 0; i < srcPixels.length; i += 4) {
+			if (useRgb) {
+				srcPixels[i] = sRGB_to_RGB_table[srcData.data[i]];
+				srcPixels[i + 1] = sRGB_to_RGB_table[srcData.data[i + 1]];
+				srcPixels[i + 2] = sRGB_to_RGB_table[srcData.data[i + 2]];
+			} else {
+				srcPixels[i] = srcData.data[i] / 255;
+				srcPixels[i + 1] = srcData.data[i + 1] / 255;
+				srcPixels[i + 2] = srcData.data[i + 2] / 255;
+			}
+			srcPixels[i + 3] = srcData.data[i + 3] / 255; // アルファ値
+			srcPixels[i] *= srcPixels[i + 3];
+			srcPixels[i + 1] *= srcPixels[i + 3];
+			srcPixels[i + 2] *= srcPixels[i + 3];
+		}
+		// 計算を行う
+		const dstPixels = new Float32Array(xCoeffs.length * yCoeffs.length * 4);
+		for (let y = 0; y < yCoeffs.length; y++) {
+			const yCoeff = yCoeffs[y];
+			for (let x = 0; x < xCoeffs.length; x++) {
+				const xCoeff = xCoeffs[x];
+				const dstOffset = (y * xCoeffs.length + x) * 4;
+				let r = 0, g = 0, b = 0, a = 0, weight = 0;
+				for (let i = 0; i < yCoeff.coeffs.length; i++) {
+					for (let j = 0; j < xCoeff.coeffs.length; j++) {
+						const srcOffset = ((yCoeff.offset + i) * srcData.width + (xCoeff.offset + j)) * 4;
+						const coeff = yCoeff.coeffs[i] * xCoeff.coeffs[j];
+						r += srcPixels[srcOffset] * coeff;
+						g += srcPixels[srcOffset + 1] * coeff;
+						b += srcPixels[srcOffset + 2] * coeff;
+						a += srcPixels[srcOffset + 3] * coeff;
+						weight += coeff;
+					}
+				}
+				dstPixels[dstOffset] = r / weight;
+				dstPixels[dstOffset + 1] = g / weight;
+				dstPixels[dstOffset + 2] = b / weight;
+				dstPixels[dstOffset + 3] = a / weight;
+			}
+		}
+		// 計算結果を [0, 255] に変換する
+		const dstData = imageCanvasContext.createImageData(xCoeffs.length, yCoeffs.length);
+		for (let i = 0; i < dstPixels.length; i += 4) {
+			let r, g, b;
+			if (dstPixels[i + 3] < 0.5 / 255) {
+				r = 0;
+				g = 0;
+				b = 0;
+			} else if (useRgb) {
+				r = RGB_to_sRGB(dstPixels[i] / dstPixels[i + 3]);
+				g = RGB_to_sRGB(dstPixels[i + 1] / dstPixels[i + 3]);
+				b = RGB_to_sRGB(dstPixels[i + 2] / dstPixels[i + 3]);
+			} else {
+				r = (dstPixels[i] / dstPixels[i + 3]) * 255;
+				g = (dstPixels[i + 1] / dstPixels[i + 3]) * 255;
+				b = (dstPixels[i + 2] / dstPixels[i + 3]) * 255;
+			}
+			dstData.data[i] = Math.round(r);
+			dstData.data[i + 1] = Math.round(g);
+			dstData.data[i + 2] = Math.round(b);
+			dstData.data[i + 3] = Math.round(dstPixels[i + 3] * 255);
+		}
+		return dstData;
+	};
+
+	const calculateAndApplyCoeffsToData = (srcData, dstWidth, dstHeight, coeffFunction) => {
+		const xCoeffs = coeffFunction(srcData.width, dstWidth);
+		const yCoeffs = coeffFunction(srcData.height, dstHeight);
+		return applyCoeffs(srcData, xCoeffs, yCoeffs);
+	};
+
+	const stretchImage = (srcData, dstWidth, dstHeight) => {
+		switch (elems.stretchMethod.value) {
+			case "bilinear":
+				return calculateAndApplyCoeffsToData(srcData, dstWidth, dstHeight, getCoefficientsForBiliniar);
+			case "bicubic":
+				return calculateAndApplyCoeffsToData(srcData, dstWidth, dstHeight, getCoefficientsForBicubic);
+			case "lanczos3":
+				return calculateAndApplyCoeffsToData(srcData, dstWidth, dstHeight, getCoefficientsForLanczos3);
+			default:
+				// ニアレストネイバー
+				{
+					const sxList = getSamplePoints(srcData.width, dstWidth);
+					const syList = getSamplePoints(srcData.height, dstHeight);
+					const dstData = imageCanvasContext.createImageData(dstWidth, dstHeight);
+					for (let y = 0; y < dstData.height; y++) {
+						const sy = Math.round(syList[y]);
+						for (let x = 0; x < dstData.width; x++) {
+							const sx = Math.round(sxList[x]);
+							for (let i = 0; i < 4; i++) {
+								dstData.data[(y * dstData.width + x) * 4 + i] = srcData.data[(sy * srcData.width + sx) * 4 + i];
+							}
+						}
+					}
+					return dstData;
+				}
+		}
+	};
+
+	const shrinkImage = (srcData, dstWidth, dstHeight) => {
+		switch (elems.shrinkMethod.value) {
+			case "average":
+				return calculateAndApplyCoeffsToData(srcData, dstWidth, dstHeight, getCoeffiientsForAverage);
+			default:
+				// 1点サンプリング
+				{
+					const dstData = imageCanvasContext.createImageData(dstWidth, dstHeight);
+					const sxList = getSamplePoints(srcData.width, dstWidth);
+					const syList = getSamplePoints(srcData.height, dstHeight);
+					for (let y = 0; y < dstData.height; y++) {
+						const sy = Math.round(syList[y]);
+						for (let x = 0; x < dstData.width; x++) {
+							const sx = Math.round(sxList[x]);
+							for (let i = 0; i < 4; i++) {
+								dstData.data[(y * dstData.width + x) * 4 + i] = srcData.data[(sy * srcData.width + sx) * 4 + i];
+							}
+						}
+					}
+					return dstData;
+				}
+		}
+	};
+
+	elems.resizeButton.addEventListener("click", () => {
+		const srcData = getCurrentData();
+		const srcWidth = srcData.width, srcHeight = srcData.height;
+		let dstData;
+		if (resizeToWidth <= srcWidth && resizeToHeight <= srcHeight) {
+			// 縮小のみ
+			dstData = shrinkImage(srcData, resizeToWidth, resizeToHeight);
+		} else if (resizeToWidth >= srcWidth && resizeToHeight >= srcHeight) {
+			// 拡大のみ
+			dstData = stretchImage(srcData, resizeToWidth, resizeToHeight);
+		} else if (resizeToWidth > srcWidth) {
+			// 横は拡大、縦は縮小
+			const middleData = stretchImage(srcData, resizeToWidth, srcHeight);
+			dstData = shrinkImage(middleData, resizeToWidth, resizeToHeight);
+		} else {
+			// 横は縮小、縦は拡大
+			const middleData = stretchImage(srcData, srcWidth, resizeToHeight);
+			dstData = shrinkImage(middleData, resizeToWidth, resizeToHeight);
+		}
+		doNewOperation(dstData);
 	});
 
 	elems.rotateLeftButton.addEventListener("click", () => {
